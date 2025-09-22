@@ -30,6 +30,26 @@ services:
     networks:
       - itosm_network
 
+  # Database migration service (runs once with admin privileges)
+  itosm_migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrations
+    container_name: itosm_migrations_prod
+    restart: "no"  # Run once only
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      database:
+        condition: service_healthy
+    command: ["sh", "-c", "echo 'Running database migrations with admin privileges...' && npm run db:push && echo 'Migrations completed successfully'"]
+    networks:
+      - itosm_network
+
   # ITOSM Application (Internal only)
   itosm_app:
     build:
@@ -53,6 +73,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      itosm_migrations:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "node -e \"const http=require('http');const req=http.request({host:'localhost',port:5000,path:'/api/health',timeout:5000},(res)=>{process.exit(res.statusCode===200?0:1)});req.on('error',()=>process.exit(1));req.end();\""]
       interval: 30s

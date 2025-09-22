@@ -22,15 +22,15 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     END
     \$\$;
 
-    -- Secure the public schema (revoke default CREATE from PUBLIC)
+    -- Secure the database and public schema
+    REVOKE CONNECT ON DATABASE ${POSTGRES_DB} FROM PUBLIC;
     REVOKE CREATE ON SCHEMA public FROM PUBLIC;
     
     -- Grant minimal required permissions for application
     GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${APP_DB_USER};
     
-    -- Grant schema access
+    -- Grant schema access (read-only for app, migrations handle CREATE)
     GRANT USAGE ON SCHEMA public TO ${APP_DB_USER};
-    GRANT CREATE ON SCHEMA public TO ${APP_DB_USER};
     
     -- Grant permissions on ALL existing tables and sequences
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_DB_USER};

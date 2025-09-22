@@ -36,7 +36,19 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # ===================
-# Stage 5: Production Runtime
+# Stage 5: Migration Runtime (includes dev dependencies)
+# ===================
+FROM dependencies AS migrations
+# Copy all source files needed for migrations
+COPY --chown=nodejs:nodejs . .
+RUN npm run build
+
+# Create migration script
+RUN echo '#!/bin/sh\necho "Running database migrations..."\nnpm run db:push\necho "Migrations completed successfully"' > /app/migrate.sh && \
+    chmod +x /app/migrate.sh
+
+# ===================
+# Stage 6: Production Runtime
 # ===================
 FROM node:20-alpine AS production
 
@@ -77,8 +89,8 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD node -e "const http=require('http');const options={host:'localhost',port:5000,path:'/api/health',timeout:2000};const req=http.request(options,(res)=>{if(res.statusCode===200){process.exit(0)}else{process.exit(1)}});req.on('error',()=>{process.exit(1)});req.end();"
 
-# Create startup script to run migrations and start app
-RUN echo '#!/bin/sh\necho "Running database migrations..."\nnpm run db:push\necho "Starting application..."\nexec node dist/index.js' > /app/start.sh && \
+# Create startup script to start app (migrations handled by separate service)
+RUN echo '#!/bin/sh\necho "Starting application..."\nexec node dist/index.js' > /app/start.sh && \
     chmod +x /app/start.sh
 
 # Start application with migrations
