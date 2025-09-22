@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:16-alpine
+    container_name: itosm_database
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # SECURITY: No port mapping in production - access only via network
+    # Uncomment next line ONLY for development debugging:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-itosm_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # Resource limits for database
+    mem_limit: 512m
+    cpus: 0.5
+    networks:
+      - itosm_network
+
+  # ITOSM Application (Frontend + Backend)
+  itosm_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: itosm_application
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+      PORT: 5000
+      SESSION_SECRET: ${SESSION_SECRET}
+      # Object Storage Configuration (if using Google Cloud Storage)
+      DEFAULT_OBJECT_STORAGE_BUCKET_ID: ${DEFAULT_OBJECT_STORAGE_BUCKET_ID:-}
+      PRIVATE_OBJECT_DIR: ${PRIVATE_OBJECT_DIR:-.private}
+      PUBLIC_OBJECT_SEARCH_PATHS: ${PUBLIC_OBJECT_SEARCH_PATHS:-public}
+    # SECURITY: App port only exposed in development
+    # In production, nginx handles all external traffic
+    profiles:
+      - development
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount for persistent uploads (if not using cloud storage)
+      - uploads_data:/app/uploads
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const req=http.request({host:'localhost',port:5000,path:'/api/health',timeout:5000},(res)=>{process.exit(res.statusCode===200?0:1)});req.on('error',()=>process.exit(1));req.end();\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits (use docker-compose v2 format)
+    mem_limit: 1g
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    networks:
+      - itosm_network
+
+  # Nginx Reverse Proxy (Development - HTTP only)
+  nginx:
+    image: nginx:alpine
+    container_name: itosm_nginx_dev
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - itosm_app
+    networks:
+      - itosm_network
+    profiles:
+      - nginx  # Optional nginx for development
+
+networks:
+  itosm_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+# ===========================================
+# Usage Instructions:
+# ===========================================
+#
+# Development:
+#   docker-compose up --build
+#
+# Production with Nginx:
+#   docker-compose --profile production up --build -d
+#
+# Scale application:
+#   docker-compose up --scale itosm_app=3
+#
+# View logs:
+#   docker-compose logs -f itosm_app
+#
+# Database backup:
+#   docker-compose exec database pg_dump -U postgres itosm_db > backup.sql
+#
+# Database restore:
+#   docker-compose exec -T database psql -U postgres itosm_db < backup.sql
+# ===========================================

@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { loginSchema, adminLoginSchema, insertTicketSchema, insertTicketAttachmentSchema, insertSoftwareSchema } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
@@ -269,6 +271,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(csvContent);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Health check endpoint for Docker
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Test actual database connectivity with a simple query
+      const result = await db.execute(sql`SELECT 1 as health_check`);
+      if (result.rows.length > 0) {
+        res.status(200).json({
+          status: "healthy",
+          timestamp: new Date().toISOString(),
+          database: "connected",
+          version: "1.0.0"
+        });
+      } else {
+        throw new Error("Database query returned no results");
+      }
+    } catch (error) {
+      console.error("Health check failed:", error);
+      res.status(503).json({
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        database: "disconnected",
+        error: "Database connection failed"
+      });
     }
   });
 

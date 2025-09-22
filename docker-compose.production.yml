@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:16-alpine
+    container_name: itosm_database_prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # App user configuration for init script
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    # SECURITY: No port mapping - internal access only
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql:ro
+      - ./scripts/init-db-user.sh:/docker-entrypoint-initdb.d/02-init-db-user.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # Resource limits for database
+    mem_limit: 512m
+    cpus: 0.5
+    networks:
+      - itosm_network
+
+  # ITOSM Application (Internal only)
+  itosm_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: itosm_application_prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@database:5432/${POSTGRES_DB}
+      PORT: 5000
+      SESSION_SECRET: ${SESSION_SECRET}
+      # Object Storage Configuration
+      DEFAULT_OBJECT_STORAGE_BUCKET_ID: ${DEFAULT_OBJECT_STORAGE_BUCKET_ID:-}
+      PRIVATE_OBJECT_DIR: ${PRIVATE_OBJECT_DIR:-.private}
+      PUBLIC_OBJECT_SEARCH_PATHS: ${PUBLIC_OBJECT_SEARCH_PATHS:-public}
+    # NO PORT MAPPING - nginx only
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const req=http.request({host:'localhost',port:5000,path:'/api/health',timeout:5000},(res)=>{process.exit(res.statusCode===200?0:1)});req.on('error',()=>process.exit(1));req.end();\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits and security constraints
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 100
+    ulimits:
+      nofile: 1024
+      nproc: 64
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+    networks:
+      - itosm_network
+
+  # Nginx Reverse Proxy (PRODUCTION - HTTPS REQUIRED)
+  nginx:
+    image: nginx:alpine
+    container_name: itosm_nginx_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      itosm_app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -f https://localhost/health || wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    mem_limit: 256m
+    cpus: 0.25
+    pids_limit: 50
+    ulimits:
+      nofile: 512
+      nproc: 32
+    networks:
+      - itosm_network
+
+networks:
+  itosm_network:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
