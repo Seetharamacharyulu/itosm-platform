@@ -1,7 +1,56 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { loginSchema, insertTicketSchema } from "@shared/schema";
+import { loginSchema, insertTicketSchema, insertTicketAttachmentSchema } from "@shared/schema";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+
+// Authentication middleware - checks for user session
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  // For now, we'll check if there's a user header passed from the frontend
+  // In a real app, this would validate a session token or JWT
+  const userId = req.headers['x-user-id'] as string;
+  const username = req.headers['x-username'] as string;
+  const isAdmin = req.headers['x-is-admin'] === 'true';
+  
+  if (!userId || !username) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  
+  // Add user info to request for use in route handlers
+  (req as any).user = {
+    id: parseInt(userId),
+    username,
+    isAdmin
+  };
+  
+  next();
+}
+
+// Authorization middleware - checks if user can access a specific ticket
+async function requireTicketAccess(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  const ticketId = parseInt(req.params.id || req.params.ticketId);
+  
+  if (!user) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  
+  try {
+    const ticket = await storage.getTicketById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+    
+    // Allow access if user is admin or ticket owner
+    if (user.isAdmin || ticket.userId === user.id) {
+      next();
+    } else {
+      res.status(403).json({ message: "Access denied" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -153,6 +202,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(history);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Ticket attachment routes (protected)
+  app.get("/api/tickets/:id/attachments", requireAuth, requireTicketAccess, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const attachments = await storage.getTicketAttachments(id);
+      res.json(attachments);
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/tickets/:id/attachments", requireAuth, requireTicketAccess, async (req, res) => {
+    try {
+      const ticketId = parseInt(req.params.id);
+      const user = (req as any).user;
+      const attachmentData = insertTicketAttachmentSchema.parse({
+        ...req.body,
+        ticketId
+      });
+      
+      // Verify the objectPath is valid and belongs to allowed namespace
+      const objectStorageService = new ObjectStorageService();
+      try {
+        // Validate that the object exists in our storage
+        await objectStorageService.getObjectEntityFile(attachmentData.objectPath);
+      } catch (error) {
+        if (error instanceof ObjectNotFoundError) {
+          return res.status(400).json({ message: "Invalid object path" });
+        }
+        throw error;
+      }
+      
+      const attachment = await storage.addTicketAttachment(attachmentData);
+      res.status(201).json(attachment);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid attachment data" });
+    }
+  });
+
+  app.delete("/api/tickets/:ticketId/attachments/:id", requireAuth, requireTicketAccess, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteTicketAttachment(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Attachment not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Object storage routes for file uploads (protected)
+  app.post("/api/objects/upload", requireAuth, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      
+      // Convert the upload URL to the normalized object path that the frontend should use
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      res.json({ uploadURL, objectPath });
+    } catch (error) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Serve uploaded files with authorization
+  app.get("/objects/:objectPath(*)", requireAuth, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      // Extract object path from URL
+      const objectPath = req.path;
+      
+      // Find which attachment record corresponds to this object path
+      const attachment = await storage.getAttachmentByObjectPath(objectPath);
+      if (!attachment) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      
+      // Get the ticket to verify ownership
+      const ticket = await storage.getTicketById(attachment.ticketId);
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Check if user is authorized to access this file
+      // User must be the ticket owner OR admin
+      if (!user.isAdmin && ticket.userId !== user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error accessing object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
     }
   });
 

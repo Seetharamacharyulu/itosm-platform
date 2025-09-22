@@ -41,3 +41,21 @@ export interface CreateTicketData {
   softwareId?: number;
   description: string;
 }
+
+export interface TicketAttachment {
+  id: number;
+  ticketId: number;
+  fileName: string;
+  fileSize?: number;
+  fileType?: string;
+  objectPath: string;
+  uploadedAt: string;
+}
+
+export interface CreateAttachmentData {
+  ticketId: number;
+  fileName: string;
+  fileSize?: number;
+  fileType?: string;
+  objectPath: string;
+}

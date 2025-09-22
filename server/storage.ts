@@ -1,4 +1,4 @@
-import { users, tickets, softwareCatalog, ticketHistory, type User, type InsertUser, type Ticket, type InsertTicket, type Software, type TicketHistory } from "@shared/schema";
+import { users, tickets, softwareCatalog, ticketHistory, ticketAttachments, type User, type InsertUser, type Ticket, type InsertTicket, type Software, type TicketHistory, type TicketAttachment, type InsertTicketAttachment } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -25,6 +25,11 @@ export interface IStorage {
   // Ticket history operations
   addTicketHistory(history: { ticketId: number; status: string; notes?: string }): Promise<TicketHistory>;
   getTicketHistory(ticketId: number): Promise<TicketHistory[]>;
+  
+  // Ticket attachment operations
+  addTicketAttachment(attachment: InsertTicketAttachment): Promise<TicketAttachment>;
+  getTicketAttachments(ticketId: number): Promise<TicketAttachment[]>;
+  deleteTicketAttachment(id: number): Promise<boolean>;
   
   // Statistics
   getTicketStats(userId?: number): Promise<{
@@ -139,6 +144,34 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(ticketHistory)
       .where(eq(ticketHistory.ticketId, ticketId))
       .orderBy(desc(ticketHistory.updatedAt));
+  }
+
+  async addTicketAttachment(attachment: InsertTicketAttachment): Promise<TicketAttachment> {
+    const [attachmentEntry] = await db.insert(ticketAttachments).values(attachment).returning();
+    return attachmentEntry;
+  }
+
+  async getTicketAttachments(ticketId: number): Promise<TicketAttachment[]> {
+    return await db.select().from(ticketAttachments)
+      .where(eq(ticketAttachments.ticketId, ticketId))
+      .orderBy(desc(ticketAttachments.uploadedAt));
+  }
+
+  async getAttachmentByObjectPath(objectPath: string): Promise<TicketAttachment | null> {
+    const results = await db.select().from(ticketAttachments)
+      .where(eq(ticketAttachments.objectPath, objectPath))
+      .limit(1);
+    
+    return results[0] || null;
+  }
+
+  async deleteTicketAttachment(id: number): Promise<boolean> {
+    try {
+      await db.delete(ticketAttachments).where(eq(ticketAttachments.id, id));
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async getTicketStats(userId?: number): Promise<{

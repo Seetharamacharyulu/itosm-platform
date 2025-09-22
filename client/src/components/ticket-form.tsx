@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ticketsApi, softwareApi } from "@/lib/api";
+import { ticketsApi, softwareApi, attachmentsApi, objectStorageApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Send, AlertCircle, CheckCircle, Clock, Users, Zap } from "lucide-react";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import { Send, AlertCircle, CheckCircle, Clock, Users, Zap, Paperclip, X } from "lucide-react";
 
 const ticketSchema = z.object({
   requestType: z.string().min(1, "Request type is required"),
@@ -29,6 +30,12 @@ interface TicketFormProps {
 
 export function TicketForm({ onSuccess }: TicketFormProps) {
   const [showSoftware, setShowSoftware] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{
+    fileName: string;
+    fileSize: number;
+    fileType: string;
+    objectPath: string;
+  }>>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const user = getCurrentUser();
@@ -49,7 +56,22 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
 
   const createTicketMutation = useMutation({
     mutationFn: ticketsApi.create,
-    onSuccess: (newTicket) => {
+    onSuccess: async (newTicket) => {
+      // Upload attachments after ticket creation
+      for (const attachment of pendingAttachments) {
+        try {
+          await attachmentsApi.create({
+            ticketId: newTicket.id,
+            fileName: attachment.fileName,
+            fileSize: attachment.fileSize,
+            fileType: attachment.fileType,
+            objectPath: attachment.objectPath,
+          });
+        } catch (error) {
+          console.error("Failed to attach file:", error);
+        }
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
@@ -58,6 +80,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
       });
       form.reset();
       setShowSoftware(false);
+      setPendingAttachments([]);
       onSuccess?.();
     },
     onError: () => {
@@ -91,6 +114,41 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   const handleClear = () => {
     form.reset();
     setShowSoftware(false);
+    setPendingAttachments([]);
+  };
+
+  const handleGetUploadParameters = async () => {
+    const { uploadURL, objectPath } = await objectStorageApi.getUploadUrl();
+    return {
+      method: "PUT" as const,
+      url: uploadURL,
+      objectPath: objectPath,
+    };
+  };
+
+  const handleUploadComplete = (files: {
+    name: string;
+    size: number;
+    type: string;
+    uploadURL: string;
+    objectPath: string;
+  }[]) => {
+    files.forEach((file) => {
+      setPendingAttachments(prev => [...prev, {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        objectPath: file.objectPath,
+      }]);
+      toast({
+        title: "File Uploaded",
+        description: `${file.name} has been attached to your ticket`,
+      });
+    });
+  };
+
+  const removeAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -176,6 +234,55 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* File Attachments Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <FormLabel>Attachments (Optional)</FormLabel>
+                <ObjectUploader
+                  maxNumberOfFiles={5}
+                  maxFileSize={10485760} // 10MB
+                  onGetUploadParameters={handleGetUploadParameters}
+                  onComplete={handleUploadComplete}
+                  buttonClassName="variant-outline"
+                >
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-4 w-4" />
+                    <span>Add File</span>
+                  </div>
+                </ObjectUploader>
+              </div>
+              
+              {pendingAttachments.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {pendingAttachments.length} file(s) attached:
+                  </p>
+                  {pendingAttachments.map((attachment, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-2 bg-accent/50 rounded border"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Paperclip className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{attachment.fileName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({(attachment.fileSize / 1024 / 1024).toFixed(2)} MB)
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeAttachment(index)}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <Alert className="bg-accent/30 border-accent">
               <AlertCircle className="h-4 w-4" />
