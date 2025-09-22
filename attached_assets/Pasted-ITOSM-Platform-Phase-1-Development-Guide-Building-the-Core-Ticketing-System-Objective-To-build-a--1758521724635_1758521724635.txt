@@ -1,0 +1,412 @@
+ITOSM Platform - Phase 1 Development Guide
+Building the Core Ticketing System
+Objective: To build a fully functional, enterprise-grade IT ticketing system. This system will serve as the foundation (Phase 1) of the larger Unified IT Operations and Service Management platform.
+
+Guiding Principles:
+
+Microservices Architecture: Decouple functionality for independent development, deployment, and scalability.
+
+Container-First: Use Docker and Docker Compose to ensure a consistent, reproducible environment locally and prepare for cloud deployment.
+
+Message-Driven: Employ a message broker for asynchronous communication between services, enhancing resilience and scalability.
+
+Clean API Design: Adhere to RESTful principles for clear and maintainable service-to-service and client-to-server communication.
+
+1. Architecture & Technology Stack
+For Phase 1, our architecture focuses on the core user journey of submitting a ticket and the admin's initial view and notification.
+
+Technology Stack:
+
+Frontend: React 18
+
+Backend: Java 17, Spring Boot 3
+
+Database: PostgreSQL 15
+
+Message Broker: RabbitMQ
+
+Containerization: Docker & Docker Compose
+
+Middleware Choice: RabbitMQ
+
+For this ticketing system, our primary need is for reliable, asynchronous notifications (e.g., "a new ticket has been created"). RabbitMQ is the ideal choice for this use case. It is a mature, robust message broker that excels at complex routing and guaranteed message delivery, which is exactly what we need for task queues and notifications.
+
+While Kafka is an incredibly powerful distributed streaming platform, its log-based architecture is overkill for our current needs. It's better suited for high-throughput data ingestion and stream processing, which we will consider in Phase 3 when we introduce real-time network monitoring. Using RabbitMQ now keeps our Phase 1 architecture simpler, lighter, and easier to manage.
+
+2. Project Structure
+Create the following directory structure in your Replit environment. This monorepo-style setup keeps all our related services in one place.
+
+itosm-platform/
+├── docker-compose.yml
+├── backend/
+│   ├── user-auth-service/
+│   │   ├── src/
+│   │   └── pom.xml
+│   │   └── Dockerfile
+│   ├── ticketing-service/
+│   │   ├── src/
+│   │   └── pom.xml
+│   │   └── Dockerfile
+│   └── notification-service/
+│       ├── src/
+│       └── pom.xml
+│       └── Dockerfile
+└── frontend/
+    ├── public/
+    ├── src/
+    ├── package.json
+    └── Dockerfile
+
+3. Orchestration with docker-compose.yml
+This single file defines and connects all the services, making the entire application runnable with one command.
+
+File: itosm-platform/docker-compose.yml
+
+version: '3.8'
+services:
+  postgres-db:
+    image: postgres:15
+    container_name: itosm-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=itosm_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - itosm-network
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: itosm-rabbitmq
+    ports:
+      - "5672:5672"  # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - itosm-network
+
+  user-auth-service:
+    build: ./backend/user-auth-service
+    container_name: user-auth-service
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres-db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/itosm_db
+    networks:
+      - itosm-network
+
+  ticketing-service:
+    build: ./backend/ticketing-service
+    container_name: ticketing-service
+    ports:
+      - "8082:8080"
+    depends_on:
+      - postgres-db
+      - rabbitmq
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/itosm_db
+      - SPRING_RABBITMQ_HOST=rabbitmq
+    networks:
+      - itosm-network
+
+  notification-service:
+    build: ./backend/notification-service
+    container_name: notification-service
+    ports:
+      - "8083:8080"
+    depends_on:
+      - rabbitmq
+    environment:
+      - SPRING_RABBITMQ_HOST=rabbitmq
+    networks:
+      - itosm-network
+
+  frontend:
+    build: ./frontend
+    container_name: itosm-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - user-auth-service
+      - ticketing-service
+    networks:
+      - itosm-network
+
+networks:
+  itosm-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+
+4. Database Initialization
+Create a file to set up our initial database schema and seed some data.
+
+File: itosm-platform/db_init/init.sql
+
+-- Create Users Table
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    employee_id VARCHAR(50) NOT NULL UNIQUE,
+    is_admin BOOLEAN DEFAULT FALSE
+);
+
+-- Create Software Catalog Table
+CREATE TABLE software_catalog (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    version VARCHAR(50)
+);
+
+-- Create Tickets Table
+CREATE TABLE tickets (
+    id SERIAL PRIMARY KEY,
+    ticket_id VARCHAR(20) NOT NULL UNIQUE,
+    user_id INT REFERENCES users(id),
+    request_type VARCHAR(50) NOT NULL,
+    software_id INT REFERENCES software_catalog(id),
+    description TEXT,
+    status VARCHAR(50) DEFAULT 'Start',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create Ticket History Table
+CREATE TABLE ticket_history (
+    id SERIAL PRIMARY KEY,
+    ticket_id INT REFERENCES tickets(id),
+    status VARCHAR(50) NOT NULL,
+    notes TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed Initial Data
+INSERT INTO users (username, employee_id, is_admin) VALUES
+('john.doe', 'EMP123', FALSE),
+('jane.smith', 'EMP124', FALSE),
+('admin.user', 'ADMIN01', TRUE);
+
+INSERT INTO software_catalog (name, version) VALUES
+('Autodesk AutoCAD', '2025'),
+('Autodesk Revit', '2025'),
+('AVEVA E3D Design', '3.2'),
+('Leica Cyclone 3DR', '2024.1');
+
+5. Backend Service: user-auth-service
+This service handles user validation.
+
+File: backend/user-auth-service/pom.xml
+
+<!-- Basic Spring Boot parent with Web, JPA, PostgreSQL, and Lombok -->
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+</dependencies>
+<!-- Add Spring Boot parent, build plugins etc. -->
+
+File: backend/user-auth-service/src/main/java/.../UserController.java
+
+@RestController
+@RequestMapping("/api/auth")
+public class UserController {
+    // Inject UserRepository
+    @PostMapping("/validate")
+    public ResponseEntity<User> validateUser(@RequestBody AuthRequest request) {
+        // Find user by employeeId and username
+        // If found, return user details with HTTP 200 OK
+        // If not found, return HTTP 404 Not Found
+    }
+}
+// Create User entity, AuthRequest DTO, and UserRepository interface
+
+File: backend/user-auth-service/Dockerfile
+
+FROM openjdk:17-slim
+WORKDIR /app
+COPY target/*.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+6. Backend Service: ticketing-service
+This service creates and manages tickets and publishes events to RabbitMQ.
+
+File: backend/ticketing-service/pom.xml
+
+<!-- Same as user-auth-service, but add RabbitMQ dependency -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+
+File: backend/ticketing-service/src/main/java/.../TicketController.java
+
+@RestController
+@RequestMapping("/api/tickets")
+public class TicketController {
+    // Inject TicketService
+    @PostMapping
+    public ResponseEntity<Ticket> createTicket(@RequestBody TicketRequest request) {
+        Ticket newTicket = ticketService.createTicket(request);
+        return new ResponseEntity<>(newTicket, HttpStatus.CREATED);
+    }
+    // Add GET methods for admin dashboard
+}
+
+File: backend/ticketing-service/src/main/java/.../TicketService.java
+
+@Service
+public class TicketService {
+    // Inject RabbitTemplate and repositories
+    public Ticket createTicket(TicketRequest request) {
+        // 1. Generate a unique ticket ID (e.g., INC-2025-0001)
+        // 2. Save the ticket to the database
+        // 3. Create a TicketCreatedEvent object with ticket details
+        // 4. rabbitTemplate.convertAndSend("ticket_exchange", "ticket.created", event);
+        // 5. Return the saved ticket
+    }
+}
+// Create Ticket entity, TicketRequest DTO, repositories, and RabbitMQ config
+
+File: backend/ticketing-service/Dockerfile
+
+FROM openjdk:17-slim
+WORKDIR /app
+COPY target/*.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+7. Backend Service: notification-service
+This service listens for events from RabbitMQ and handles notifications.
+
+File: backend/notification-service/pom.xml
+
+<!-- Same dependencies as ticketing-service -->
+
+File: backend/notification-service/src/main/java/.../TicketListener.java
+
+@Component
+public class TicketListener {
+    @RabbitListener(queues = "notification_queue")
+    public void handleTicketCreated(TicketCreatedEvent event) {
+        System.out.println("--- New Ticket Notification ---");
+        System.out.println("Ticket ID: " + event.getTicketId());
+        System.out.println("User: " + event.getUsername());
+        System.out.println("Request: " + event.getRequestType());
+        // In a real app, this would use an email/SMS client
+        sendEmail("it-admin-group@your-org.com", "New Ticket Created: " + event.getTicketId());
+        sendSms("+919876543210", "New Ticket: " + event.getTicketId());
+        System.out.println("-----------------------------");
+    }
+    // Add private methods for sendEmail and sendSms
+}
+// Create RabbitMQ config to declare the exchange and queue
+
+File: backend/notification-service/Dockerfile
+
+FROM openjdk:17-slim
+WORKDIR /app
+COPY target/*.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+8. Frontend Application: frontend
+The user-facing portal built with React.
+
+File: frontend/package.json
+
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "axios": "^1.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-router-dom": "^6.0.0",
+    "react-scripts": "5.0.1"
+  }
+  // ... scripts and other config
+}
+
+File: frontend/src/App.js
+
+// Use React Router to define routes
+// /login -> LoginPage
+// /new-request -> TicketFormPage
+// /admin -> AdminDashboardPage
+
+File: frontend/src/components/TicketForm.js
+
+// Build a form with fields for request type, software (if applicable), and description.
+// On submit, use Axios to make a POST request to the ticketing-service API:
+// axios.post('http://localhost:8082/api/tickets', formData);
+
+File: frontend/Dockerfile
+
+# Stage 1: Build the React app
+FROM node:18-alpine as build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: Serve using Nginx
+FROM nginx:1.25-alpine
+COPY --from=build /app/build /usr/share/nginx/html
+# Optional: Add nginx.conf for routing API requests
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
+9. How to Run the Application
+With all the files in place, running the entire platform is straightforward.
+
+Open a Terminal in the root itosm-platform directory.
+
+Build and Run all containers:
+
+docker-compose up --build
+
+Access the Services:
+
+Frontend Portal: http://localhost:3000
+
+RabbitMQ Management UI: http://localhost:15672 (user: guest, pass: guest)
+
+Backend APIs:
+
+User Service: http://localhost:8081
+
+Ticketing Service: http://localhost:8082
+
+You can now test the end-to-end flow: log in as a user, create a ticket, and watch the logs of the notification-service to see the "email/SMS" being sent. You can also check the RabbitMQ UI to see messages flowing through the exchange.
+
+10. Next Steps: Future Phases
+This completes Phase 1. The foundation is now set for the next stages:
+
+Phase 2: Enhance the admin dashboard with ticket management features (change status, assign agent) and build the "My Tickets" view for users.
+
+Phase 3: Develop the Asset & Monitor Service and deploy monitoring agents to PCs. Integrate real-time network health data into the admin dashboard using Grafana.
+
+Phase 4: Transition from Docker Compose to Kubernetes for orchestration, and build a full CI/CD pipeline for automated testing and deployment.
