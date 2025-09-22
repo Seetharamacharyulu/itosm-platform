@@ -55,11 +55,14 @@ export default function LoginPage() {
         <CardContent className="p-8">
           <div className="text-center mb-8">
             <div className="mx-auto mb-4 flex justify-center">
-              <img 
-                src={geosoftLogo} 
-                alt="GeoSoft Logo" 
-                className="h-12 w-auto"
-              />
+              <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-4 rounded-xl shadow-lg">
+                <img 
+                  src={geosoftLogo} 
+                  alt="GeoSoft Logo" 
+                  className="h-12 w-auto filter brightness-0 invert"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
+              </div>
             </div>
             <h1 className="text-2xl font-medium text-foreground">ITOSM Platform</h1>
             <p className="text-muted-foreground mt-1">Geosoft Global-surtech service portal</p>

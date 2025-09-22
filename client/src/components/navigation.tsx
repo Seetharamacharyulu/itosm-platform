@@ -33,11 +33,14 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center py-3 lg:py-2 min-h-[60px]">
           {/* Logo and Title Section */}
           <div className="flex items-center space-x-3 mb-2 lg:mb-0">
-            <img 
-              src={geosoftLogo} 
-              alt="GeoSoft Logo" 
-              className="h-6 sm:h-8 w-auto flex-shrink-0"
-            />
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-2 rounded-lg shadow-sm">
+              <img 
+                src={geosoftLogo} 
+                alt="GeoSoft Logo" 
+                className="h-6 sm:h-8 w-auto flex-shrink-0 filter brightness-0 invert"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
+            </div>
             <div className="flex flex-col min-w-0">
               <h1 className="text-lg sm:text-xl font-medium text-foreground leading-tight truncate">ITOSM Platform</h1>
               <span className="text-xs text-muted-foreground hidden sm:block leading-tight">Geosoft Global-surtech service portal</span>
