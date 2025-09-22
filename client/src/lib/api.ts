@@ -1,9 +1,14 @@
 import { apiRequest } from "@/lib/queryClient";
-import { LoginCredentials, CreateTicketData, User, Ticket, Software, TicketStats, TicketAttachment, CreateAttachmentData } from "@/types";
+import { LoginCredentials, AdminLoginCredentials, CreateTicketData, User, Ticket, Software, TicketStats, TicketAttachment, CreateAttachmentData } from "@/types";
 
 export const authApi = {
   validate: async (credentials: LoginCredentials): Promise<User> => {
     const response = await apiRequest("POST", "/api/auth/validate", credentials);
+    return response.json();
+  },
+  
+  validateAdmin: async (credentials: AdminLoginCredentials): Promise<User> => {
+    const response = await apiRequest("POST", "/api/auth/admin", credentials);
     return response.json();
   },
 };
@@ -65,5 +70,16 @@ export const objectStorageApi = {
   getUploadUrl: async (): Promise<{ uploadURL: string; objectPath: string }> => {
     const response = await apiRequest("POST", "/api/objects/upload");
     return response.json();
+  },
+};
+
+export const adminApi = {
+  uploadSoftwareCSV: async (csvData: Array<{ name: string; version?: string }>): Promise<{ message: string; addedSoftware: any[] }> => {
+    const response = await apiRequest("POST", "/api/admin/software/upload-csv", { csvData });
+    return response.json();
+  },
+  
+  downloadSampleCSV: async (): Promise<void> => {
+    window.open('/api/admin/software/sample-csv', '_blank');
   },
 };

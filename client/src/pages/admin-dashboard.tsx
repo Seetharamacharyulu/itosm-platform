@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { StatsCards } from "@/components/stats-cards";
 import { TicketTable } from "@/components/ticket-table";
+import { AdminCSVManager } from "@/components/AdminCSVManager";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { ticketsApi, statsApi } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -116,16 +118,30 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* All Tickets Table */}
-        {ticketsLoading ? (
-          <Skeleton className="h-96 w-full" />
-        ) : (
-          <TicketTable 
-            tickets={filteredTickets} 
-            title="All Tickets" 
-            isAdmin={true}
-          />
-        )}
+        {/* Tabs for different admin functions */}
+        <Tabs defaultValue="tickets" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="tickets" data-testid="tab-tickets">Ticket Management</TabsTrigger>
+            <TabsTrigger value="csv" data-testid="tab-csv">Software Catalog</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="tickets" className="space-y-6">
+            {/* All Tickets Table */}
+            {ticketsLoading ? (
+              <Skeleton className="h-96 w-full" />
+            ) : (
+              <TicketTable 
+                tickets={filteredTickets} 
+                title="All Tickets" 
+                isAdmin={true}
+              />
+            )}
+          </TabsContent>
+          
+          <TabsContent value="csv" className="space-y-6">
+            <AdminCSVManager />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

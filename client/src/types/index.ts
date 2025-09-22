@@ -35,6 +35,11 @@ export interface LoginCredentials {
   username: string;
 }
 
+export interface AdminLoginCredentials {
+  username: string;
+  password: string;
+}
+
 export interface CreateTicketData {
   userId: number;
   requestType: string;

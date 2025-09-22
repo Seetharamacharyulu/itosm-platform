@@ -8,6 +8,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmployeeId(employeeId: string): Promise<User | undefined>;
   validateUser(employeeId: string, username: string): Promise<User | undefined>;
+  validateAdmin(username: string, password: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
   // Ticket operations
@@ -21,6 +22,7 @@ export interface IStorage {
   // Software operations
   getAllSoftware(): Promise<Software[]>;
   getSoftwareById(id: number): Promise<Software | undefined>;
+  addSoftware(software: { name: string; version?: string }): Promise<Software>;
   
   // Ticket history operations
   addTicketHistory(history: { ticketId: number; status: string; notes?: string }): Promise<TicketHistory>;
@@ -63,6 +65,17 @@ export class DatabaseStorage implements IStorage {
   async validateUser(employeeId: string, username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(
       and(eq(users.employeeId, employeeId), eq(users.username, username))
+    );
+    return user || undefined;
+  }
+
+  async validateAdmin(username: string, password: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username), 
+        eq(users.password, password),
+        eq(users.isAdmin, true)
+      )
     );
     return user || undefined;
   }
@@ -133,6 +146,11 @@ export class DatabaseStorage implements IStorage {
   async getSoftwareById(id: number): Promise<Software | undefined> {
     const [software] = await db.select().from(softwareCatalog).where(eq(softwareCatalog.id, id));
     return software || undefined;
+  }
+
+  async addSoftware(software: { name: string; version?: string }): Promise<Software> {
+    const [newSoftware] = await db.insert(softwareCatalog).values(software).returning();
+    return newSoftware;
   }
 
   async addTicketHistory(history: { ticketId: number; status: string; notes?: string }): Promise<TicketHistory> {

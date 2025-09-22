@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { loginSchema, insertTicketSchema, insertTicketAttachmentSchema } from "@shared/schema";
+import { loginSchema, adminLoginSchema, insertTicketSchema, insertTicketAttachmentSchema, insertSoftwareSchema } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 // Authentication middleware - checks for user session
@@ -63,6 +63,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ 
           message: "Invalid credentials. Please check your Employee ID and Username." 
+        });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ 
+        message: "Invalid request data" 
+      });
+    }
+  });
+
+  // Admin authentication route
+  app.post("/api/auth/admin", async (req, res) => {
+    try {
+      const { username, password } = adminLoginSchema.parse(req.body);
+      
+      const user = await storage.validateAdmin(username, password);
+      
+      if (!user) {
+        return res.status(404).json({ 
+          message: "Invalid admin credentials. Please check your Username and Password." 
         });
       }
       
@@ -183,6 +204,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin-only route to upload software CSV
+  app.post("/api/admin/software/upload-csv", requireAuth, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { csvData } = req.body;
+      if (!csvData || !Array.isArray(csvData)) {
+        return res.status(400).json({ message: "Invalid CSV data" });
+      }
+
+      const addedSoftware = [];
+      for (const row of csvData) {
+        try {
+          const softwareData = insertSoftwareSchema.parse(row);
+          // Convert null to undefined to match TypeScript types
+          const normalizedData = {
+            ...softwareData,
+            version: softwareData.version === null ? undefined : softwareData.version
+          };
+          const software = await storage.addSoftware(normalizedData);
+          addedSoftware.push(software);
+        } catch (error) {
+          console.error("Failed to add software:", error);
+          // Continue processing other rows
+        }
+      }
+
+      res.json({ 
+        message: `Successfully added ${addedSoftware.length} software items`,
+        addedSoftware 
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin-only route to download sample CSV
+  app.get("/api/admin/software/sample-csv", requireAuth, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const sampleData = [
+        { name: "Microsoft Office", version: "2021" },
+        { name: "Adobe Photoshop", version: "2023" },
+        { name: "Visual Studio Code", version: "Latest" },
+        { name: "AutoCAD", version: "2024" },
+        { name: "Slack", version: "Latest" }
+      ];
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="software-template.csv"');
+      
+      const csvHeader = "name,version\n";
+      const csvRows = sampleData.map(item => `"${item.name}","${item.version}"`).join('\n');
+      const csvContent = csvHeader + csvRows;
+      
+      res.send(csvContent);
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Statistics routes
   app.get("/api/stats", async (req, res) => {
     try {
@@ -290,6 +379,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get the ticket to verify ownership
+      if (!attachment.ticketId) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
       const ticket = await storage.getTicketById(attachment.ticketId);
       if (!ticket) {
         return res.status(404).json({ message: "Ticket not found" });

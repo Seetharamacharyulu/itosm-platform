@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: varchar("username", { length: 50 }).notNull().unique(),
   employeeId: varchar("employee_id", { length: 50 }).notNull().unique(),
+  password: varchar("password", { length: 255 }), // For admin users only
   isAdmin: boolean("is_admin").default(false),
 });
 
@@ -94,6 +95,11 @@ export const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
 });
 
+export const adminLoginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -106,3 +112,4 @@ export type InsertTicketHistory = z.infer<typeof insertTicketHistorySchema>;
 export type TicketAttachment = typeof ticketAttachments.$inferSelect;
 export type InsertTicketAttachment = z.infer<typeof insertTicketAttachmentSchema>;
 export type LoginRequest = z.infer<typeof loginSchema>;
+export type AdminLoginRequest = z.infer<typeof adminLoginSchema>;

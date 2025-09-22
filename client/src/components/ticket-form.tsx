@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ticketsApi, softwareApi, attachmentsApi, objectStorageApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -152,10 +153,11 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   };
 
   return (
-    <Card className="shadow-sm">
-      <CardContent className="p-8">
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <TooltipProvider>
+      <Card className="shadow-sm">
+        <CardContent className="p-8">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
@@ -163,25 +165,34 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Request Type *</FormLabel>
-                    <Select 
-                      onValueChange={handleRequestTypeChange} 
-                      value={field.value}
-                      data-testid="select-request-type"
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select request type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Software Installation">Software Installation</SelectItem>
-                        <SelectItem value="License Activation">License Activation</SelectItem>
-                        <SelectItem value="Hardware Replacement">Hardware Replacement</SelectItem>
-                        <SelectItem value="Network Issue">Network Issue</SelectItem>
-                        <SelectItem value="System Maintenance">System Maintenance</SelectItem>
-                        <SelectItem value="User Access">User Access</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Select 
+                            onValueChange={handleRequestTypeChange} 
+                            value={field.value}
+                            data-testid="select-request-type"
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select request type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Software Installation">Software Installation</SelectItem>
+                              <SelectItem value="License Activation">License Activation</SelectItem>
+                              <SelectItem value="Hardware Replacement">Hardware Replacement</SelectItem>
+                              <SelectItem value="Network Issue">Network Issue</SelectItem>
+                              <SelectItem value="System Maintenance">System Maintenance</SelectItem>
+                              <SelectItem value="User Access">User Access</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Choose the category that best describes your IT service request</p>
+                      </TooltipContent>
+                    </Tooltip>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -194,20 +205,29 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Software</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} data-testid="select-software">
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select software" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {software.map((item) => (
-                            <SelectItem key={item.id} value={item.id.toString()}>
-                              {item.name} {item.version}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div>
+                            <Select onValueChange={field.onChange} value={field.value} data-testid="select-software">
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select software" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {software.map((item) => (
+                                  <SelectItem key={item.id} value={item.id.toString()}>
+                                    {item.name} {item.version}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Select the specific software you need help with (appears for Software Installation requests)</p>
+                        </TooltipContent>
+                      </Tooltip>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -221,15 +241,24 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Description *</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      {...field}
-                      rows={4}
-                      placeholder="Please provide detailed information about your request..."
-                      className="resize-vertical"
-                      data-testid="textarea-description"
-                    />
-                  </FormControl>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <FormControl>
+                          <Textarea 
+                            {...field}
+                            rows={4}
+                            placeholder="Please provide detailed information about your request..."
+                            className="resize-vertical"
+                            data-testid="textarea-description"
+                          />
+                        </FormControl>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Provide detailed information about your request. Include steps to reproduce issues, error messages, and any relevant context (minimum 10 characters)</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <FormMessage />
                 </FormItem>
               )}
@@ -239,18 +268,27 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <FormLabel>Attachments (Optional)</FormLabel>
-                <ObjectUploader
-                  maxNumberOfFiles={5}
-                  maxFileSize={10485760} // 10MB
-                  onGetUploadParameters={handleGetUploadParameters}
-                  onComplete={handleUploadComplete}
-                  buttonClassName="variant-outline"
-                >
-                  <div className="flex items-center gap-2">
-                    <Paperclip className="h-4 w-4" />
-                    <span>Add File</span>
-                  </div>
-                </ObjectUploader>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <ObjectUploader
+                        maxNumberOfFiles={5}
+                        maxFileSize={10485760} // 10MB
+                        onGetUploadParameters={handleGetUploadParameters}
+                        onComplete={handleUploadComplete}
+                        buttonClassName="variant-outline"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Paperclip className="h-4 w-4" />
+                          <span>Add File</span>
+                        </div>
+                      </ObjectUploader>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Upload screenshots, documents, or other files related to your request (max 5 files, 10MB each)</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
               
               {pendingAttachments.length > 0 && (
@@ -270,14 +308,21 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                           ({(attachment.fileSize / 1024 / 1024).toFixed(2)} MB)
                         </span>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeAttachment(index)}
-                        className="h-6 w-6 p-0"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeAttachment(index)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Remove this file attachment</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   ))}
                 </div>
@@ -310,33 +355,48 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
             </Alert>
 
             <div className="flex justify-end space-x-4">
-              <Button 
-                type="button" 
-                variant="outline"
-                onClick={handleClear}
-                disabled={createTicketMutation.isPending}
-                data-testid="button-cancel"
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={createTicketMutation.isPending}
-                data-testid="button-submit-ticket"
-              >
-                {createTicketMutation.isPending ? (
-                  "Submitting..."
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Submit Ticket
-                  </>
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={handleClear}
+                    disabled={createTicketMutation.isPending}
+                    data-testid="button-cancel"
+                  >
+                    Cancel
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Clear the form and cancel ticket creation</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    type="submit" 
+                    disabled={createTicketMutation.isPending}
+                    data-testid="button-submit-ticket"
+                  >
+                    {createTicketMutation.isPending ? (
+                      "Submitting..."
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Submit Ticket
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Submit your service request ticket to the IT support team</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </form>
         </Form>
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 }
