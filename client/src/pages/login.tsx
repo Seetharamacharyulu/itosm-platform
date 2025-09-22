@@ -11,7 +11,8 @@ import { useMutation } from "@tanstack/react-query";
 import { authApi } from "@/lib/api";
 import { setCurrentUser } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { Ticket, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import geosoftLogo from "@assets/Horizontal@4x-8_1758525197447.png";
 
 const loginSchema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -53,11 +54,15 @@ export default function LoginPage() {
       <Card className="w-full max-w-md mx-4 shadow-lg">
         <CardContent className="p-8">
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-              <Ticket className="h-8 w-8 text-primary-foreground" />
+            <div className="mx-auto mb-4 flex justify-center">
+              <img 
+                src={geosoftLogo} 
+                alt="GeoSoft Logo" 
+                className="h-12 w-auto"
+              />
             </div>
             <h1 className="text-2xl font-medium text-foreground">ITOSM Platform</h1>
-            <p className="text-muted-foreground mt-1">IT Operations & Service Management</p>
+            <p className="text-muted-foreground mt-1">Geosoft Global-surtech service portal</p>
           </div>
           
           {error && (
