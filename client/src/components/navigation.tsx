@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, clearCurrentUser, isAdmin } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { Ticket, Settings, Plus, BarChart3, LogOut } from "lucide-react";
+import { Settings, Plus, BarChart3, LogOut } from "lucide-react";
+import geosoftLogo from "@assets/Horizontal@4x-8_1758525197447.png";
 
 interface NavigationProps {
   activeTab: string;
@@ -31,10 +32,15 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-4">
-            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-              <Ticket className="h-4 w-4 text-primary-foreground" />
+            <img 
+              src={geosoftLogo} 
+              alt="GeoSoft Logo" 
+              className="h-8 w-auto"
+            />
+            <div className="flex flex-col">
+              <h1 className="text-xl font-medium text-foreground leading-tight">ITOSM Platform</h1>
+              <span className="text-xs text-muted-foreground">Geosoft Global-surtech service portal</span>
             </div>
-            <h1 className="text-xl font-medium text-foreground">ITOSM Platform</h1>
           </div>
           
           <nav className="flex items-center space-x-6">
