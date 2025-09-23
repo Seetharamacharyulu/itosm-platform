@@ -1,49 +1,49 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, serial, boolean, timestamp, integer } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: varchar("username", { length: 50 }).notNull().unique(),
-  employeeId: varchar("employee_id", { length: 50 }).notNull().unique(),
-  password: varchar("password", { length: 255 }), // For admin users only
-  isAdmin: boolean("is_admin").default(false),
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull().unique(),
+  employeeId: text("employee_id").notNull().unique(),
+  password: text("password"), // For admin users only
+  isAdmin: integer("is_admin", { mode: 'boolean' }).default(false),
 });
 
-export const softwareCatalog = pgTable("software_catalog", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  version: varchar("version", { length: 50 }),
+export const softwareCatalog = sqliteTable("software_catalog", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  version: text("version"),
 });
 
-export const tickets = pgTable("tickets", {
-  id: serial("id").primaryKey(),
-  ticketId: varchar("ticket_id", { length: 20 }).notNull().unique(),
+export const tickets = sqliteTable("tickets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ticketId: text("ticket_id").notNull().unique(),
   userId: integer("user_id").references(() => users.id),
-  requestType: varchar("request_type", { length: 50 }).notNull(),
+  requestType: text("request_type").notNull(),
   softwareId: integer("software_id").references(() => softwareCatalog.id),
   description: text("description"),
-  status: varchar("status", { length: 50 }).default("Start"),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+  status: text("status").default("Start"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const ticketHistory = pgTable("ticket_history", {
-  id: serial("id").primaryKey(),
+export const ticketHistory = sqliteTable("ticket_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   ticketId: integer("ticket_id").references(() => tickets.id),
-  status: varchar("status", { length: 50 }).notNull(),
+  status: text("status").notNull(),
   notes: text("notes"),
-  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const ticketAttachments = pgTable("ticket_attachments", {
-  id: serial("id").primaryKey(),
+export const ticketAttachments = sqliteTable("ticket_attachments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   ticketId: integer("ticket_id").references(() => tickets.id),
-  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileName: text("file_name").notNull(),
   fileSize: integer("file_size"),
-  fileType: varchar("file_type", { length: 100 }),
-  objectPath: varchar("object_path", { length: 512 }).notNull(),
-  uploadedAt: timestamp("uploaded_at").default(sql`CURRENT_TIMESTAMP`),
+  fileType: text("file_type"),
+  objectPath: text("object_path").notNull(),
+  uploadedAt: text("uploaded_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Relations
