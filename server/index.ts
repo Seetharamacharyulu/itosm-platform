@@ -1,26 +1,29 @@
+// server/index.ts
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
-// Trust nginx proxy in production for secure cookies and proper client IPs
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
+// Trust proxy only in production
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
 }
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Lightweight API logger with response snippet
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, any> | undefined;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
+  const originalResJson = res.json.bind(res);
+  res.json = function (bodyJson: any, ...args: any[]) {
     capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
+    return originalResJson(bodyJson, ...args);
   };
 
   res.on("finish", () => {
@@ -28,13 +31,11 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        try {
+          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        } catch {}
       }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
+      if (logLine.length > 80) logLine = logLine.slice(0, 79) + "…";
       log(logLine);
     }
   });
@@ -43,35 +44,39 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  // register routes; some implementations return an http.Server, others not
+  const maybeServer = await registerRoutes(app);
 
+  // Central error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
     res.status(status).json({ message });
-    throw err;
+    try { console.error(err); } catch {}
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Dev: Vite middleware; Prod: static files
   if (app.get("env") === "development") {
-    await setupVite(app, server);
+    await setupVite(app, maybeServer);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
+  // Port/host (Windows-safe defaults)
+  const port = Number(process.env.PORT ?? 5000);
+  const host = process.env.BIND_HOST ?? "127.0.0.1";
+
+  // Prefer returned server if present, else bind Express directly
+  const listen =
+    maybeServer && typeof (maybeServer as any).listen === "function"
+      ? (maybeServer as any).listen.bind(maybeServer)
+      : app.listen.bind(app);
+
+  // IMPORTANT: use (port, host) signature; DO NOT pass an options object (breaks on Windows)
+  listen(port, host, () => {
+    log(`serving on http://${host}:${port} (env=${app.get("env")})`);
   });
-})();
+})().catch((e) => {
+  console.error("Fatal bootstrap error:", e);
+  process.exit(1);
+});

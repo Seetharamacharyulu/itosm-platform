@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: itosm-app
+  namespace: itosm
+  labels:
+    app: itosm-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: itosm-app
+  template:
+    metadata:
+      labels:
+        app: itosm-app
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/Seetharamacharyulu/itosm-platform:latest
+          imagePullPolicy: Always
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "5000"
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      # Uncomment if GHCR image is private:
+      # imagePullSecrets:
+      #   - name: ghcr-creds
