@@ -28,3 +28,4 @@ Container registry path: `ghcr.io/Seetharamacharyulu/itosm-platform`
 4) Open `http://<your-duckdns-host>` (health: `/api/health`).
 
 If your GHCR package is **private**, create a pull secret and uncomment `imagePullSecrets` in the Deployment.
+# itosm-platform
