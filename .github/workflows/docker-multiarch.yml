@@ -27,5 +27,5 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/Seetharamacharyulu/itosm-platform:latest
-            ghcr.io/Seetharamacharyulu/itosm-platform:${{ github.sha }}
+            ghcr.io/seetharamacharyulu/itosm-platform:latest
+            ghcr.io/seetharamacharyulu/itosm-platform:${{ github.sha }}
